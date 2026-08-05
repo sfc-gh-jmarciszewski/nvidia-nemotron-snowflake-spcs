@@ -1,0 +1,80 @@
+spec:
+  containers:
+
+    # -------------------------------------------------------------------------
+    # Container 1: NVIDIA Model-Free NIM
+    # Runs Nemotron-Mini-4B-Instruct from HuggingFace with TensorRT-LLM optimization.
+    # Exposes OpenAI-compatible API on port 8000.
+    # -------------------------------------------------------------------------
+    - name: nim
+      image: /nemotron_db/nemotron_schema/nemotron_repo/model-free-nim:latest
+      env:
+        # HuggingFace model path — NIM downloads weights on first boot,
+        # then caches the compiled TensorRT engine to the block volume.
+        NIM_MODEL_PATH: "hf://nvidia/Nemotron-Mini-4B-Instruct"
+        # Nemotron-Mini has a 4K native context window
+        NIM_MAX_MODEL_LEN: "4096"
+      secrets:
+        # NGC API key injected at runtime — required by NIM for licensing/telemetry
+        - snowflakeSecret: nemotron_db.nemotron_schema.ngc_api_key
+          secretKeyRef: secret_string
+          envVarName: NGC_API_KEY
+      resources:
+        requests:
+          nvidia.com/gpu: 1
+          memory: 20Gi
+          cpu: 4000m
+        limits:
+          nvidia.com/gpu: 1
+          memory: 24Gi
+      # SPCS only sends traffic once NIM reports the model is fully loaded
+      # and the TensorRT engine is compiled (~5–15 min on first cold start).
+      readinessProbe:
+        port: 8000
+        path: /v1/health/ready
+      volumeMounts:
+        - name: nim-cache
+          mountPath: /opt/nim/.cache
+
+    # -------------------------------------------------------------------------
+    # Container 2: Translator sidecar
+    # Bridges Snowflake SQL row format {"data":[[id,prompt],...]}
+    # to NIM's OpenAI chat format, and back.
+    # Calls NIM over localhost:8000 (shared network namespace).
+    # -------------------------------------------------------------------------
+    - name: translator
+      image: /nemotron_db/nemotron_schema/nemotron_repo/nim-translator:latest
+      # NIM_MODEL defaults to auto-discovery via /v1/models if not set.
+      # The model-free-nim registers models as the full HF path: hf://nvidia/Nemotron-Mini-4B-Instruct
+      # env:
+      #   NIM_MODEL: "hf://nvidia/Nemotron-Mini-4B-Instruct"
+      resources:
+        requests:
+          memory: 256Mi
+          cpu: 500m
+        limits:
+          memory: 512Mi
+      readinessProbe:
+        port: 5000
+        path: /health
+
+  endpoints:
+    # Public endpoint — routes through the translator sidecar (port 5000).
+    # The translator proxies /v1/* to NIM on localhost:8000, stripping the
+    # Snowflake auth header so NIM receives clean OpenAI-format requests.
+    # Also handles SQL service function calls on /complete.
+    - name: nim-api
+      port: 5000
+      public: true
+    # NIM's raw port — internal only (NIM binds to 127.0.0.1, so only
+    # the translator can reach it; the SPCS ingress cannot).
+    - name: nim-internal
+      port: 8000
+      public: false
+
+  volumes:
+    # Block storage persists the compiled TensorRT engine across restarts.
+    # Without this, every cold start re-downloads ~8 GB and recompiles.
+    - name: nim-cache
+      source: block
+      size: 50Gi

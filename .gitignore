@@ -1,0 +1,13 @@
+# .gitignore 
+.DS_Store
+
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+*.egg-info/
+dist/
+build_output/
+
+TODO.md
