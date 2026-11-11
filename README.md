@@ -114,7 +114,7 @@ Or run locally (see [Local Development](#local-development-uv) below).
 
 ---
 
-## Demo Operations / Pre-Meeting Checklist
+## Demo Operations Checklist
 
 This service is GPU-backed — keep the compute pool **suspended** when not in use and wake it just before a demo to avoid unnecessary billing.
 
@@ -126,7 +126,7 @@ Complete Steps 1–4 above. After the smoke test passes, verify everything looks
 ALTER COMPUTE POOL NEMOTRON_GPU_POOL SUSPEND;
 ```
 
-### Before the meeting (can do hours or days in advance)
+### Before the demo (can do hours or days in advance)
 
 Resume the service and confirm it reaches READY before the meeting starts:
 
@@ -151,7 +151,7 @@ Once the smoke test returns a real answer, suspend again if the meeting is still
 ALTER COMPUTE POOL NEMOTRON_GPU_POOL SUSPEND;
 ```
 
-### When the customer arrives
+### When ready to demo
 
 ```sql
 -- Wake up (~2 min, cached engine — no weight re-download)
@@ -162,7 +162,7 @@ ALTER SERVICE NEMOTRON_SERVICE RESUME;
 SELECT SYSTEM$GET_SERVICE_STATUS('NEMOTRON_DB.NEMOTRON_SCHEMA.NEMOTRON_SERVICE');
 ```
 
-### After the meeting
+### After you're done 
 
 ```sql
 ALTER COMPUTE POOL NEMOTRON_GPU_POOL SUSPEND;
@@ -311,10 +311,6 @@ ALTER COMPUTE POOL NEMOTRON_GPU_POOL RESUME;
 - NVIDIA/HuggingFace egress is limited to **weight download only** (first boot)
 - Access is controlled by Snowflake RBAC via `GRANT SERVICE ROLE`
 - The NGC API key is stored as a Snowflake Secret (never in code or logs)
-
-> **Before publishing this repo publicly:** clear notebook cell outputs to remove any saved
-> account URLs or usernames. Run `jupyter nbconvert --ClearOutputPreprocessor.enabled=True
-> --inplace src/notebooks/nemotron_demo.ipynb` or clear outputs manually in Snowsight.
 
 ---
 
